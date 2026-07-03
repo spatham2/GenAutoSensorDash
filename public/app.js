@@ -68,10 +68,26 @@ function renderProfileDetails() {
       <div>${profile.label}</div>
     </div>
     <div class="detail-item">
+      <strong>Execution Target</strong>
+      <code>${escapeHtml(formatRunnerTarget())}</code>
+    </div>
+    <div class="detail-item">
       <strong>Command</strong>
       <code>${escapeHtml(profile.command || "")}</code>
     </div>
   `;
+}
+
+function formatRunnerTarget() {
+  const runner = state.config?.commandRunner || { mode: "local" };
+  if (runner.mode !== "ssh") {
+    return "local shell";
+  }
+
+  const ssh = runner.ssh || {};
+  const host = ssh.host || "unconfigured-host";
+  const destination = ssh.user ? `${ssh.user}@${host}` : host;
+  return `ssh ${destination}:${ssh.port || 22}`;
 }
 
 function renderRuntime() {
@@ -135,6 +151,10 @@ function renderRosbagDetails() {
     <div class="detail-item">
       <strong>Status</strong>
       <div>${rosbagRuntime.isRecording ? "Recording" : "Stopped"}</div>
+    </div>
+    <div class="detail-item">
+      <strong>Execution Target</strong>
+      <code>${escapeHtml(formatRunnerTarget())}</code>
     </div>
     <div class="detail-item">
       <strong>Output Directory</strong>

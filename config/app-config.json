@@ -1,4 +1,25 @@
 {
+  "commandRunner": {
+    "mode": "local",
+    "ssh": {
+      "host": "jetson-orin.local",
+      "user": "ubuntu",
+      "port": 22,
+      "identityFile": "~/.ssh/id_ed25519",
+      "workingDirectory": "",
+      "remoteStateDirectory": "~/.genauto-sensor-dash",
+      "options": [
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=2"
+      ]
+    }
+  },
   "launchProfiles": {
     "gmsl_stack": {
       "label": "GMSL Cameras + Sensor Stack",
