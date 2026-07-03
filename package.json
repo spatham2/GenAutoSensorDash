@@ -1,0 +1,10 @@
+{
+  "name": "jetson-ros-launcher",
+  "version": "0.1.0",
+  "description": "Web app for launching and monitoring ROS2 sensor stacks on a Jetson Orin.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

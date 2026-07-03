@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jetson ROS Launcher</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Jetson Orin Control</p>
+          <h1>ROS2 Sensor Stack Launcher</h1>
+          <p class="subtitle">
+            Start either camera stack, watch live driver output, and mark sensors healthy
+            when their expected log lines appear.
+          </p>
+        </div>
+        <div class="runtime-pill" id="runtime-pill">Idle</div>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel-control">
+          <div class="panel-header">
+            <h2>Launch Control</h2>
+            <p>Choose which full sensor stack should run on the Jetson.</p>
+          </div>
+
+          <label class="field">
+            <span>Active launch profile</span>
+            <select id="profile-select"></select>
+          </label>
+
+          <div class="button-row">
+            <button id="start-button" class="button button-primary">Start Launch</button>
+            <button id="stop-button" class="button button-secondary">Stop Launch</button>
+          </div>
+
+          <div class="detail-grid" id="launch-details"></div>
+        </section>
+
+        <section class="panel panel-control">
+          <div class="panel-header">
+            <h2>Rosbag Recorder</h2>
+            <p>Start recording the configured topics, then stop it to finalize the bag.</p>
+          </div>
+
+          <div class="button-row">
+            <button id="start-bag-button" class="button button-primary">Start Rosbag</button>
+            <button id="stop-bag-button" class="button button-secondary">Stop Rosbag</button>
+          </div>
+
+          <div class="detail-grid" id="rosbag-details"></div>
+        </section>
+
+        <section class="panel panel-health">
+          <div class="panel-header">
+            <h2>Sensor Health</h2>
+            <p>Each sensor turns healthy after all expected output snippets are matched.</p>
+          </div>
+          <div id="sensor-list" class="sensor-list"></div>
+        </section>
+
+        <section class="panel panel-config">
+          <div class="panel-header">
+            <h2>Config Editor</h2>
+            <p>Edit launch commands and expected output snippets, then save them to disk.</p>
+          </div>
+          <textarea id="config-editor" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button id="save-config-button" class="button button-primary">Save Config</button>
+            <button id="reload-config-button" class="button button-secondary">Reload View</button>
+          </div>
+          <p class="hint">
+            Commands can be full `ros2 launch ...` lines. Expected outputs can be any text fragments
+            your drivers print when they are healthy.
+          </p>
+        </section>
+
+        <section class="panel panel-logs">
+          <div class="panel-header">
+            <h2>Runtime Logs</h2>
+            <p>Live stdout and stderr from the active ROS2 launch process.</p>
+          </div>
+          <div id="log-viewer" class="log-viewer"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>

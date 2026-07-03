@@ -1,0 +1,52 @@
+{
+  "launchProfiles": {
+    "gmsl_stack": {
+      "label": "GMSL Cameras + Sensor Stack",
+      "command": "source /opt/ros/humble/setup.bash && source ~/your_ros_ws/install/setup.bash && ros2 launch your_package gmsl_sensor_stack.launch.py"
+    },
+    "security_stack": {
+      "label": "Security Cameras + Sensor Stack",
+      "command": "source /opt/ros/humble/setup.bash && source ~/your_ros_ws/install/setup.bash && ros2 launch your_package security_sensor_stack.launch.py"
+    }
+  },
+  "sensors": [
+    {
+      "id": "ouster_os128",
+      "name": "Ouster OS-128 LiDAR",
+      "expectedOutputs": [
+        "sensor initialized",
+        "publishing point cloud",
+        "/ouster/points"
+      ]
+    },
+    {
+      "id": "mti_680g",
+      "name": "MTi-680G GPS/IMU",
+      "expectedOutputs": [
+        "device connected",
+        "filter profile",
+        "/imu/data"
+      ]
+    },
+    {
+      "id": "camera_stack",
+      "name": "Camera Stack",
+      "expectedOutputs": [
+        "camera ready",
+        "stream started",
+        "/camera"
+      ]
+    }
+  ],
+  "rosbag": {
+    "enabled": true,
+    "setupCommand": "source /opt/ros/humble/setup.bash && source ~/your_ros_ws/install/setup.bash",
+    "outputDirectory": "~/rosbags",
+    "outputPrefix": "sensor_stack",
+    "topics": [
+      "/ouster/points",
+      "/imu/data",
+      "/camera/front/image_raw"
+    ]
+  }
+}
