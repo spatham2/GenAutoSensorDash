@@ -61,7 +61,7 @@
   ],
   "hardware": {
     "ouster": {
-      "lidarIp": "",
+      "lidarIp": "169.254.38.198",
       "lidarMode": "1024x10",
       "timestampMode": "TIME_FROM_ROS_TIME",
       "pointType": "original"
