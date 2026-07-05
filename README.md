@@ -14,6 +14,7 @@ a remote Jetson, then copy completed rosbags back with `scp`.
 - Starts, pauses, resumes, and stops the Ouster, MTi-680G, and selected SLAM processes
 - Checks whether the Ouster and MTi-680G ROS topics are publishing live data
 - Starts and stops SLAM rosbag recording on the Jetson
+- Stops recording and calls LIO-SAM's save-map service into `~/maps`
 - Keeps completed bag files on the Jetson under `~/rosbags`
 - Copies completed bag folders to this device with `scp` and downloads `.tar.gz` archives
 - Streams stdout and stderr into the browser
@@ -121,7 +122,7 @@ Log out and back in after changing groups, then verify the drivers:
 source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 
-ros2 launch ouster_ros sensor.launch.xml sensor_hostname:=<OUSTER_LIDAR_IP> lidar_mode:=1024x10 timestamp_mode:=TIME_FROM_ROS_TIME point_type:=original viz:=false
+ros2 launch ouster_ros sensor.launch.xml sensor_hostname:=169.254.38.198 udp_dest:=169.254.1.101 lidar_mode:=1024x10 timestamp_mode:=TIME_FROM_ROS_TIME viz:=false
 ros2 launch xsens_mti_ros2_driver xsens_mti_node.launch.py
 
 ros2 topic hz /ouster/points
@@ -138,7 +139,8 @@ Set the Ouster LiDAR IP once here:
 ```json
 "hardware": {
   "ouster": {
-    "lidarIp": "192.168.1.XX",
+    "lidarIp": "169.254.38.198",
+    "udpDest": "169.254.1.101",
     "lidarMode": "1024x10",
     "timestampMode": "TIME_FROM_ROS_TIME",
     "pointType": "original"
@@ -151,13 +153,26 @@ Put your sensor driver launch commands here:
 ```json
 "drivers": {
   "ouster": {
-    "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} point_type:={{hardware.ouster.pointType}} viz:=false",
+    "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} udp_dest:={{hardware.ouster.udpDest}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} viz:=false",
     "requiredTopics": ["/ouster/points"]
   },
   "mti680g": {
     "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch xsens_mti_ros2_driver xsens_mti_node.launch.py",
     "requiredTopics": ["/imu/data", "/gnss"]
   }
+}
+```
+
+Save the LIO-SAM PCD map under `~/maps` with:
+
+```json
+"mapSave": {
+  "setupCommand": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash",
+  "service": "/lio_sam/save_map",
+  "serviceType": "lio_sam/srv/SaveMap",
+  "destination": "/maps",
+  "resolution": 0.2,
+  "timeoutSeconds": 180
 }
 ```
 
@@ -171,7 +186,7 @@ Select which SLAM command the dashboard should run by changing `selectedDriver`:
   "drivers": {
     "lio_sam": {
       "label": "LIO-SAM",
-      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
+      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
       "requiredTopics": [
         "/lio_sam/mapping/odometry",
         "/lio_sam/mapping/odometry_incremental",
@@ -230,7 +245,7 @@ npm start
 3. Open `http://127.0.0.1:3000`.
 4. Confirm the SSH target shows `spatham@10.10.10.1:22`, then click **Check Connection**.
 5. Start **Ouster LiDAR Driver** and **MTi-680G IMU/GPS Driver**.
-6. Click **Check ROS Topics**. MTi-680G is healthy when `/imu/data` and `/gnss` return live data in ROS2.
+6. Click **Check ROS Topics**. The dashboard checks `ros2 topic list`; MTi-680G is healthy when `/imu/data` and `/gnss` are listed.
 7. Start **SLAM**. The command comes from `slam.drivers[slam.selectedDriver]`.
 8. Click **Start SLAM Recording**. The dashboard runs a configured `ros2 bag record`.
 
@@ -238,7 +253,7 @@ npm start
 source /opt/ros/humble/setup.bash && mkdir -p ~/rosbags && ros2 bag record -o ~/rosbags/slam_<timestamp> /ouster/points /imu/data /gnss /tf /tf_static /lio_sam/deskew/cloud_deskewed /lio_sam/feature/cloud_corner /lio_sam/feature/cloud_surface /lio_sam/mapping/odometry /lio_sam/mapping/odometry_incremental /lio_sam/mapping/cloud_registered /lio_sam/mapping/cloud_registered_raw /lio_sam/mapping/path
 ```
 
-9. Click **Stop Recording** to finalize the bag on the Orin.
+9. Click **Stop Recording + Save Map** to finalize the bag and call `/lio_sam/save_map` into `~/maps`.
 10. Click **Save to This Device**. The dashboard runs an `scp -r` copy from the Orin, archives the bag, then downloads the `.tar.gz`.
 
 ## SSH mode

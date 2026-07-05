@@ -74,6 +74,7 @@ const DEFAULT_CONFIG = {
   hardware: {
     ouster: {
       lidarIp: "",
+      udpDest: "169.254.1.101",
       lidarMode: "1024x10",
       timestampMode: "TIME_FROM_ROS_TIME",
       pointType: "original"
@@ -82,7 +83,7 @@ const DEFAULT_CONFIG = {
   drivers: {
     ouster: {
       label: "Ouster LiDAR Driver",
-      command: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} point_type:={{hardware.ouster.pointType}} viz:=false",
+      command: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} udp_dest:={{hardware.ouster.udpDest}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} viz:=false",
       requiredTopics: [
         "/ouster/points"
       ]
@@ -109,7 +110,7 @@ const DEFAULT_CONFIG = {
       },
       lio_sam: {
         label: "LIO-SAM",
-        command: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
+        command: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
         requiredTopics: [
           "/lio_sam/mapping/odometry",
           "/lio_sam/mapping/odometry_incremental",
@@ -136,7 +137,7 @@ const DEFAULT_CONFIG = {
     }
   },
   healthChecks: {
-    setupCommand: "source /opt/ros/humble/setup.bash",
+    setupCommand: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash",
     sampleTimeoutSeconds: 4
   },
   rosbag: {
@@ -159,6 +160,14 @@ const DEFAULT_CONFIG = {
       "/lio_sam/mapping/cloud_registered_raw",
       "/lio_sam/mapping/path"
     ]
+  },
+  mapSave: {
+    setupCommand: "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash",
+    service: "/lio_sam/save_map",
+    serviceType: "lio_sam/srv/SaveMap",
+    destination: "/maps",
+    resolution: 0.2,
+    timeoutSeconds: 180
   },
   downloads: {
     localDirectory: "~/Downloads/GenAutoSensorDash"
@@ -304,6 +313,18 @@ function normalizeHealthChecks(healthChecks = {}) {
   };
 }
 
+function normalizeMapSave(mapSave = {}) {
+  const source = mapSave && typeof mapSave === "object" ? mapSave : {};
+  const resolution = Number(source.resolution ?? DEFAULT_CONFIG.mapSave.resolution);
+  const timeoutSeconds = Number(source.timeoutSeconds || DEFAULT_CONFIG.mapSave.timeoutSeconds);
+  return {
+    ...DEFAULT_CONFIG.mapSave,
+    ...source,
+    resolution: Number.isFinite(resolution) && resolution >= 0 ? resolution : DEFAULT_CONFIG.mapSave.resolution,
+    timeoutSeconds: Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds : DEFAULT_CONFIG.mapSave.timeoutSeconds
+  };
+}
+
 function normalizeConfig(config = {}) {
   return {
     commandRunner: normalizeCommandRunner(config.commandRunner),
@@ -314,6 +335,7 @@ function normalizeConfig(config = {}) {
     slam: normalizeSlam(config.slam),
     healthChecks: normalizeHealthChecks(config.healthChecks),
     rosbag: normalizeRosbag(config.rosbag),
+    mapSave: normalizeMapSave(config.mapSave),
     downloads: normalizeDownloads(config.downloads)
   };
 }
@@ -730,6 +752,13 @@ let managedProcesses = {};
 let activeRosbagRecording = null;
 let rosbagRecordings = [];
 let downloadArchives = new Map();
+let mapSaveStatus = {
+  status: "idle",
+  destination: "~/maps",
+  message: "Map has not been saved yet.",
+  startedAt: null,
+  savedAt: null
+};
 let connectionStatus = {
   status: "unknown",
   checkedAt: null,
@@ -836,6 +865,7 @@ function getState() {
       activeRecording: serializeRecording(activeRosbagRecording),
       recordings: rosbagRecordings.slice(-20).map(serializeRecording)
     },
+    mapSave: mapSaveStatus,
     sensors: sensorStatuses,
     logs: logLines.slice(-500)
   };
@@ -950,15 +980,17 @@ function buildTopicHealthCommand() {
     }))
     .filter((check) => check.topics.length > 0);
 
-  const lines = [];
+  const lines = [
+    `listed_topics="$(ros2 topic list 2>/dev/null || true)"`,
+    `listed_topics_nl="$(printf '\\n%s\\n' "$listed_topics")"`
+  ];
   for (const check of checks) {
     for (const topic of check.topics) {
       lines.push([
         `topic=${shellQuote(topic)}`,
-        `if timeout ${Math.ceil(timeoutSeconds)}s ros2 topic echo --once "$topic" >/dev/null 2>&1; then`,
-        `printf '%s|%s|online|data\\n' ${shellQuote(check.id)} "$topic"`,
-        `elif ros2 topic list 2>/dev/null | grep -Fxq "$topic"; then`,
-        `printf '%s|%s|waiting|listed_no_data\\n' ${shellQuote(check.id)} "$topic"`,
+        'topic_no_slash="${topic#/}"',
+        `if [[ "$listed_topics_nl" == *$'\\n'"$topic"$'\\n'* || "$listed_topics_nl" == *$'\\n'"/$topic_no_slash"$'\\n'* || "$listed_topics_nl" == *$'\\n'"$topic_no_slash"$'\\n'* ]]; then`,
+        `printf '%s|%s|online|listed\\n' ${shellQuote(check.id)} "$topic"`,
         `else`,
         `printf '%s|%s|offline|missing\\n' ${shellQuote(check.id)} "$topic"`,
         `fi`
@@ -1401,6 +1433,95 @@ async function stopRosbagProcess() {
   return { ...exitResult, remote: remoteResult };
 }
 
+function getMapSaveDestinationLabel(mapSave = appConfig.mapSave || DEFAULT_CONFIG.mapSave) {
+  const destination = String(mapSave.destination || DEFAULT_CONFIG.mapSave.destination).trim();
+  if (!destination) {
+    return "~/maps";
+  }
+  if (destination === "~" || destination.startsWith("~/")) {
+    return destination;
+  }
+  if (destination.startsWith("/")) {
+    return `~${destination}`;
+  }
+  return `~/${destination}`;
+}
+
+function buildSaveMapCommand() {
+  const mapSave = appConfig.mapSave || DEFAULT_CONFIG.mapSave;
+  const setupCommand = String(mapSave.setupCommand || "").trim();
+  const service = String(mapSave.service || DEFAULT_CONFIG.mapSave.service).trim();
+  const serviceType = String(mapSave.serviceType || DEFAULT_CONFIG.mapSave.serviceType).trim();
+  const destination = String(mapSave.destination || DEFAULT_CONFIG.mapSave.destination).trim();
+  const resolution = Number(mapSave.resolution ?? DEFAULT_CONFIG.mapSave.resolution);
+  const timeoutSeconds = Math.max(1, Math.ceil(Number(mapSave.timeoutSeconds || DEFAULT_CONFIG.mapSave.timeoutSeconds)));
+  const request = `{resolution: ${Number.isFinite(resolution) && resolution >= 0 ? resolution : 0}, destination: ${destination || "/maps"}}`;
+  const serviceCall = `timeout ${timeoutSeconds}s ros2 service call ${shellQuote(service)} ${shellQuote(serviceType)} ${shellQuote(request)}`;
+  return setupCommand ? `${setupCommand} && ${serviceCall}` : serviceCall;
+}
+
+async function saveLioSamMap() {
+  const runner = getCommandRunner();
+  const destination = getMapSaveDestinationLabel();
+  mapSaveStatus = {
+    status: "saving",
+    destination,
+    message: "Saving LIO-SAM map...",
+    startedAt: new Date().toISOString(),
+    savedAt: null
+  };
+  broadcast("map-save", mapSaveStatus);
+
+  const command = buildSaveMapCommand();
+  const spec = buildOneShotSpec(command, runner);
+  const timeoutMs = Math.max(1, Number(appConfig.mapSave?.timeoutSeconds || DEFAULT_CONFIG.mapSave.timeoutSeconds)) * 1000 + 15000;
+  appendLog("map-save", `Saving LIO-SAM map to ${destination} on ${describeRunnerTarget(runner)}`);
+  appendLog("map-save", `Command: ${spec.displayCommand}`);
+
+  const result = await runBufferedCommand(spec.command, spec.args, timeoutMs);
+  const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+  if (output) {
+    appendLog("map-save", output);
+  }
+
+  const serviceReportedFailure = /success\s*[:=]\s*false/i.test(output);
+  if (result.code !== 0 || serviceReportedFailure) {
+    const detail = result.error
+      ? result.error.message
+      : output || `save map exited with code ${result.code} signal ${result.signal || "none"}`;
+    mapSaveStatus = {
+      status: "failed",
+      destination,
+      message: detail,
+      startedAt: mapSaveStatus.startedAt,
+      savedAt: null
+    };
+    appendLog("map-save", `Save map failed: ${detail}`);
+    broadcast("map-save", mapSaveStatus);
+    throw new Error(detail);
+  }
+
+  mapSaveStatus = {
+    status: "saved",
+    destination,
+    message: `Map saved to ${destination}.`,
+    startedAt: mapSaveStatus.startedAt,
+    savedAt: new Date().toISOString()
+  };
+  appendLog("map-save", mapSaveStatus.message);
+  broadcast("map-save", mapSaveStatus);
+  return mapSaveStatus;
+}
+
+async function stopRosbagAndSaveMap() {
+  const stopResult = await stopRosbagProcess();
+  const mapResult = await saveLioSamMap();
+  return {
+    stopped: stopResult,
+    map: mapResult
+  };
+}
+
 function startRosbagProcess() {
   if (rosbagProcess) {
     throw new Error("Rosbag recording is already running.");
@@ -1682,6 +1803,16 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/rosbag/stop") {
     const result = await stopRosbagProcess();
     sendJson(res, 200, { ok: true, result, rosbag: getState().rosbag });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/rosbag/stop-and-save-map") {
+    try {
+      const result = await stopRosbagAndSaveMap();
+      sendJson(res, 200, { ok: true, result, rosbag: getState().rosbag, mapSave: mapSaveStatus });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message, rosbag: getState().rosbag, mapSave: mapSaveStatus });
+    }
     return;
   }
 

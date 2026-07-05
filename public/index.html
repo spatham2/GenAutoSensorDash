@@ -44,7 +44,7 @@
             <li>Start Ouster and MTi-680G</li>
             <li>Check ROS topics</li>
             <li>Start SLAM and record</li>
-            <li>Save bag</li>
+            <li>Save bag and map</li>
           </ol>
         </section>
 
@@ -89,6 +89,7 @@
           <div class="button-row">
             <button id="start-bag-button" class="button button-primary">Start SLAM Recording</button>
             <button id="stop-bag-button" class="button button-secondary">Stop Recording</button>
+            <button id="stop-save-map-button" class="button button-primary">Stop Recording + Save Map</button>
           </div>
 
           <div class="detail-grid" id="rosbag-details"></div>
@@ -114,7 +115,7 @@
             <button id="reload-config-button" class="button button-secondary">Reload View</button>
           </div>
           <p class="hint">
-            Edit `drivers`, `slam.selectedDriver`, `slam.drivers`, and `rosbag.topics` to change
+            Edit `drivers`, `slam.selectedDriver`, `slam.drivers`, `rosbag.topics`, and `mapSave` to change
             what the dashboard starts and records.
           </p>
         </section>

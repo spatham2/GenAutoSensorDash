@@ -5,6 +5,7 @@ const state = {
   health: null,
   runtime: null,
   rosbag: null,
+  mapSave: null,
   sensors: {},
   logs: []
 };
@@ -14,6 +15,7 @@ const startButton = document.getElementById("start-button");
 const stopButton = document.getElementById("stop-button");
 const startBagButton = document.getElementById("start-bag-button");
 const stopBagButton = document.getElementById("stop-bag-button");
+const stopSaveMapButton = document.getElementById("stop-save-map-button");
 const checkConnectionButton = document.getElementById("check-connection-button");
 const checkTopicsButton = document.getElementById("check-topics-button");
 const runtimePill = document.getElementById("runtime-pill");
@@ -137,8 +139,11 @@ function renderRuntime() {
   stopButton.disabled = !runtime.isRunning;
 
   const rosbag = state.rosbag || { isRecording: false };
+  const mapSave = state.mapSave || { status: "idle" };
   startBagButton.disabled = rosbag.isRecording || !isConnectionReady();
   stopBagButton.disabled = !rosbag.isRecording;
+  stopSaveMapButton.disabled = mapSave.status === "saving" || !isConnectionReady();
+  stopSaveMapButton.textContent = mapSave.status === "saving" ? "Saving Map..." : "Stop Recording + Save Map";
   renderRosbagDetails();
   renderRecordings();
 }
@@ -203,7 +208,7 @@ function formatProcessStatus(status) {
 
 function formatTopicStatus(status) {
   return {
-    online: "Data",
+    online: "Listed",
     waiting: "Listed",
     offline: "Missing",
     unknown: "Unchecked"
@@ -252,6 +257,7 @@ function renderLogs() {
 function renderRosbagDetails() {
   const rosbagConfig = state.config?.rosbag || {};
   const rosbagRuntime = state.rosbag || { isRecording: false };
+  const mapSave = state.mapSave || {};
   const activeRecording = rosbagRuntime.activeRecording;
   const topics = Array.isArray(rosbagConfig.topics) ? rosbagConfig.topics : [];
 
@@ -271,6 +277,10 @@ function renderRosbagDetails() {
     <div class="detail-item">
       <strong>Active Output</strong>
       <code>${escapeHtml(activeRecording?.remotePath || "No active recording")}</code>
+    </div>
+    <div class="detail-item">
+      <strong>Map Save</strong>
+      <code>${escapeHtml(`${mapSave.destination || "~/maps"} - ${mapSave.message || "Map has not been saved yet."}`)}</code>
     </div>
     <div class="detail-item">
       <strong>Setup Command</strong>
@@ -354,6 +364,7 @@ async function loadState() {
   state.health = data.health;
   state.runtime = data.runtime;
   state.rosbag = data.rosbag;
+  state.mapSave = data.mapSave;
   state.sensors = data.sensors;
   state.logs = data.logs;
   renderAll();
@@ -444,6 +455,21 @@ async function stopRosbag() {
   }
 }
 
+async function stopRosbagAndSaveMap() {
+  try {
+    const data = await request("/api/rosbag/stop-and-save-map", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    state.rosbag = data.rosbag;
+    state.mapSave = data.mapSave;
+    renderRuntime();
+  } catch (error) {
+    window.alert(`Could not save map: ${error.message}`);
+    await loadState();
+  }
+}
+
 async function downloadRecording(recordingId) {
   try {
     const data = await request(`/api/recordings/${encodeURIComponent(recordingId)}/download`, {
@@ -483,6 +509,7 @@ function attachEvents() {
   stopButton.addEventListener("click", stopLaunch);
   startBagButton.addEventListener("click", startRosbag);
   stopBagButton.addEventListener("click", stopRosbag);
+  stopSaveMapButton.addEventListener("click", stopRosbagAndSaveMap);
   saveConfigButton.addEventListener("click", saveConfig);
   reloadConfigButton.addEventListener("click", loadState);
   recordingList.addEventListener("click", (event) => {
@@ -512,6 +539,7 @@ function connectEvents() {
     state.health = data.health;
     state.runtime = data.runtime;
     state.rosbag = data.rosbag;
+    state.mapSave = data.mapSave;
     state.sensors = data.sensors;
     state.logs = data.logs;
     renderAll();
@@ -524,6 +552,11 @@ function connectEvents() {
 
   events.addEventListener("rosbag-runtime", (event) => {
     state.rosbag = JSON.parse(event.data);
+    renderRuntime();
+  });
+
+  events.addEventListener("map-save", (event) => {
+    state.mapSave = JSON.parse(event.data);
     renderRuntime();
   });
 

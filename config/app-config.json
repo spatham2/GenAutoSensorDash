@@ -62,6 +62,7 @@
   "hardware": {
     "ouster": {
       "lidarIp": "169.254.38.198",
+      "udpDest": "169.254.1.101",
       "lidarMode": "1024x10",
       "timestampMode": "TIME_FROM_ROS_TIME",
       "pointType": "original"
@@ -70,7 +71,7 @@
   "drivers": {
     "ouster": {
       "label": "Ouster LiDAR Driver",
-      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} point_type:={{hardware.ouster.pointType}} viz:=false",
+      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} udp_dest:={{hardware.ouster.udpDest}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} viz:=false",
       "requiredTopics": [
         "/ouster/points"
       ]
@@ -97,7 +98,7 @@
       },
       "lio_sam": {
         "label": "LIO-SAM",
-        "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
+        "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
         "requiredTopics": [
           "/lio_sam/mapping/odometry",
           "/lio_sam/mapping/odometry_incremental",
@@ -124,7 +125,7 @@
     }
   },
   "healthChecks": {
-    "setupCommand": "source /opt/ros/humble/setup.bash",
+    "setupCommand": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash",
     "sampleTimeoutSeconds": 4
   },
   "rosbag": {
@@ -147,6 +148,14 @@
       "/lio_sam/mapping/cloud_registered_raw",
       "/lio_sam/mapping/path"
     ]
+  },
+  "mapSave": {
+    "setupCommand": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash",
+    "service": "/lio_sam/save_map",
+    "serviceType": "lio_sam/srv/SaveMap",
+    "destination": "/maps",
+    "resolution": 0.2,
+    "timeoutSeconds": 180
   },
   "downloads": {
     "localDirectory": "~/Downloads/GenAutoSensorDash"
