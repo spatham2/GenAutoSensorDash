@@ -1,9 +1,9 @@
 {
   "commandRunner": {
-    "mode": "local",
+    "mode": "ssh",
     "ssh": {
-      "host": "jetson-orin.local",
-      "user": "ubuntu",
+      "host": "10.10.10.1",
+      "user": "spatham",
       "port": 22,
       "identityFile": "~/.ssh/id_ed25519",
       "workingDirectory": "",
@@ -59,15 +59,96 @@
       ]
     }
   ],
+  "hardware": {
+    "ouster": {
+      "lidarIp": "",
+      "lidarMode": "1024x10",
+      "timestampMode": "TIME_FROM_ROS_TIME",
+      "pointType": "original"
+    }
+  },
+  "drivers": {
+    "ouster": {
+      "label": "Ouster LiDAR Driver",
+      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch ouster_ros sensor.launch.xml sensor_hostname:={{hardware.ouster.lidarIp}} lidar_mode:={{hardware.ouster.lidarMode}} timestamp_mode:={{hardware.ouster.timestampMode}} point_type:={{hardware.ouster.pointType}} viz:=false",
+      "requiredTopics": [
+        "/ouster/points"
+      ]
+    },
+    "mti680g": {
+      "label": "MTi-680G IMU/GPS Driver",
+      "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch xsens_mti_ros2_driver xsens_mti_node.launch.py",
+      "requiredTopics": [
+        "/imu/data",
+        "/gnss"
+      ]
+    }
+  },
+  "slam": {
+    "selectedDriver": "lio_sam",
+    "drivers": {
+      "custom_slam": {
+        "label": "Custom SLAM",
+        "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch your_slam_package slam.launch.py",
+        "requiredTopics": [
+          "/map",
+          "/odom"
+        ]
+      },
+      "lio_sam": {
+        "label": "LIO-SAM",
+        "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch lio_sam run.launch.py params_file:=$(ros2 pkg prefix lio_sam)/share/lio_sam/config/params.yaml",
+        "requiredTopics": [
+          "/lio_sam/mapping/odometry",
+          "/lio_sam/mapping/odometry_incremental",
+          "/lio_sam/mapping/cloud_registered",
+          "/lio_sam/mapping/path"
+        ]
+      },
+      "slam_toolbox": {
+        "label": "slam_toolbox",
+        "command": "source /opt/ros/humble/setup.bash && ros2 launch slam_toolbox online_async_launch.py",
+        "requiredTopics": [
+          "/map",
+          "/odom"
+        ]
+      },
+      "fast_lio": {
+        "label": "FAST-LIO",
+        "command": "source /opt/ros/humble/setup.bash && source ~/ros2_ws/install/setup.bash && ros2 launch fast_lio mapping.launch.py",
+        "requiredTopics": [
+          "/Odometry",
+          "/cloud_registered"
+        ]
+      }
+    }
+  },
+  "healthChecks": {
+    "setupCommand": "source /opt/ros/humble/setup.bash",
+    "sampleTimeoutSeconds": 4
+  },
   "rosbag": {
     "enabled": true,
-    "setupCommand": "source /opt/ros/humble/setup.bash && source ~/your_ros_ws/install/setup.bash",
+    "setupCommand": "source /opt/ros/humble/setup.bash",
     "outputDirectory": "~/rosbags",
-    "outputPrefix": "sensor_stack",
+    "outputPrefix": "slam",
     "topics": [
       "/ouster/points",
       "/imu/data",
-      "/camera/front/image_raw"
+      "/gnss",
+      "/tf",
+      "/tf_static",
+      "/lio_sam/deskew/cloud_deskewed",
+      "/lio_sam/feature/cloud_corner",
+      "/lio_sam/feature/cloud_surface",
+      "/lio_sam/mapping/odometry",
+      "/lio_sam/mapping/odometry_incremental",
+      "/lio_sam/mapping/cloud_registered",
+      "/lio_sam/mapping/cloud_registered_raw",
+      "/lio_sam/mapping/path"
     ]
+  },
+  "downloads": {
+    "localDirectory": "~/Downloads/GenAutoSensorDash"
   }
 }

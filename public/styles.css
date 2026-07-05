@@ -114,6 +114,10 @@ h1 {
   min-height: 260px;
 }
 
+.panel-workflow {
+  grid-column: 1 / -1;
+}
+
 .panel-config,
 .panel-logs {
   min-height: 420px;
@@ -192,6 +196,87 @@ textarea {
   color: var(--ink);
 }
 
+.connection-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.connection-target {
+  display: grid;
+  gap: 6px;
+}
+
+.connection-target span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.connection-target code {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 12px 14px;
+  word-break: break-word;
+}
+
+.connection-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-online {
+  background: #d8f3e7;
+  color: var(--healthy);
+}
+
+.status-offline {
+  background: #f7d9d6;
+  color: var(--danger);
+}
+
+.status-checking {
+  background: #fff0cc;
+  color: var(--warning);
+}
+
+.status-unknown {
+  background: #ece4d4;
+  color: var(--muted);
+}
+
+.workflow-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style-position: inside;
+}
+
+.workflow-list li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
 .detail-grid {
   display: grid;
   gap: 10px;
@@ -251,6 +336,107 @@ textarea {
   background: var(--warning);
 }
 
+.status-running {
+  color: white;
+  background: var(--healthy);
+}
+
+.status-paused {
+  color: var(--ink);
+  background: #fff0cc;
+}
+
+.status-stopped {
+  color: white;
+  background: var(--muted);
+}
+
+.process-list {
+  display: grid;
+  gap: 12px;
+}
+
+.process-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.process-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.process-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.process-main code {
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.process-main > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.process-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.topic-list {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.topic-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.topic-list span {
+  word-break: break-word;
+}
+
+.topic-online strong {
+  color: var(--healthy);
+}
+
+.topic-waiting strong {
+  color: var(--warning);
+}
+
+.topic-offline strong {
+  color: var(--danger);
+}
+
+.topic-unknown strong {
+  color: var(--muted);
+}
+
 .sensor-card ul {
   margin: 0;
   padding-left: 18px;
@@ -264,6 +450,42 @@ textarea {
 .matched {
   color: var(--healthy);
   font-weight: 600;
+}
+
+.recording-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.recording-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 12px 14px;
+}
+
+.recording-card div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.recording-card code {
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.recording-card span,
+.empty-state {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .log-viewer {
@@ -305,5 +527,20 @@ textarea {
 
   .runtime-pill {
     align-self: flex-start;
+  }
+
+  .connection-row,
+  .process-card,
+  .recording-card {
+    grid-template-columns: 1fr;
+  }
+
+  .connection-actions,
+  .process-actions {
+    justify-content: flex-start;
+  }
+
+  .workflow-list {
+    grid-template-columns: 1fr;
   }
 }

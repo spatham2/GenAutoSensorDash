@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jetson ROS Launcher</title>
+    <title>Jetson SLAM Recorder</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -11,16 +11,56 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Jetson Orin Control</p>
-          <h1>ROS2 Sensor Stack Launcher</h1>
+          <h1>SLAM Rosbag Recorder</h1>
           <p class="subtitle">
-            Start either camera stack, watch live driver output, and mark sensors healthy
-            when their expected log lines appear.
+            Connect to the Orin over SSH, control Ouster and MTi-680G drivers,
+            run the selected SLAM pipeline, and save completed bags back to this device.
           </p>
         </div>
         <div class="runtime-pill" id="runtime-pill">Idle</div>
       </header>
 
       <main class="layout">
+        <section class="panel panel-workflow">
+          <div class="panel-header">
+            <h2>Jetson Connection</h2>
+            <p>Confirm the configured SSH target before recording.</p>
+          </div>
+
+          <div class="connection-row">
+            <div class="connection-target">
+              <span>SSH target</span>
+              <code id="connection-target">Loading...</code>
+            </div>
+            <div class="connection-actions">
+              <span id="connection-status" class="status-pill status-unknown">Unknown</span>
+              <button id="check-connection-button" class="button button-primary">Check Connection</button>
+            </div>
+          </div>
+
+          <ol class="workflow-list">
+            <li>Power Orin and connect sensors</li>
+            <li>Check Jetson connection</li>
+            <li>Start Ouster and MTi-680G</li>
+            <li>Check ROS topics</li>
+            <li>Start SLAM and record</li>
+            <li>Save bag</li>
+          </ol>
+        </section>
+
+        <section class="panel panel-processes">
+          <div class="panel-header">
+            <h2>Driver and SLAM Controls</h2>
+            <p>Start, pause, resume, or stop each configured process independently.</p>
+          </div>
+
+          <div class="button-row">
+            <button id="check-topics-button" class="button button-primary">Check ROS Topics</button>
+          </div>
+
+          <div id="process-list" class="process-list"></div>
+        </section>
+
         <section class="panel panel-control">
           <div class="panel-header">
             <h2>Launch Control</h2>
@@ -43,15 +83,16 @@
         <section class="panel panel-control">
           <div class="panel-header">
             <h2>Rosbag Recorder</h2>
-            <p>Start recording the configured topics, then stop it to finalize the bag.</p>
+            <p>Record LiDAR, MTi-680G, and SLAM output topics, then stop it to finalize the bag.</p>
           </div>
 
           <div class="button-row">
-            <button id="start-bag-button" class="button button-primary">Start Rosbag</button>
-            <button id="stop-bag-button" class="button button-secondary">Stop Rosbag</button>
+            <button id="start-bag-button" class="button button-primary">Start SLAM Recording</button>
+            <button id="stop-bag-button" class="button button-secondary">Stop Recording</button>
           </div>
 
           <div class="detail-grid" id="rosbag-details"></div>
+          <div class="recording-list" id="recording-list"></div>
         </section>
 
         <section class="panel panel-health">
@@ -73,8 +114,8 @@
             <button id="reload-config-button" class="button button-secondary">Reload View</button>
           </div>
           <p class="hint">
-            Commands can be full `ros2 launch ...` lines. Expected outputs can be any text fragments
-            your drivers print when they are healthy.
+            Edit `drivers`, `slam.selectedDriver`, `slam.drivers`, and `rosbag.topics` to change
+            what the dashboard starts and records.
           </p>
         </section>
 

@@ -1,5 +1,8 @@
 const state = {
   config: null,
+  connection: null,
+  processes: [],
+  health: null,
   runtime: null,
   rosbag: null,
   sensors: {},
@@ -11,9 +14,15 @@ const startButton = document.getElementById("start-button");
 const stopButton = document.getElementById("stop-button");
 const startBagButton = document.getElementById("start-bag-button");
 const stopBagButton = document.getElementById("stop-bag-button");
+const checkConnectionButton = document.getElementById("check-connection-button");
+const checkTopicsButton = document.getElementById("check-topics-button");
 const runtimePill = document.getElementById("runtime-pill");
+const connectionTarget = document.getElementById("connection-target");
+const connectionStatus = document.getElementById("connection-status");
+const processList = document.getElementById("process-list");
 const launchDetails = document.getElementById("launch-details");
 const rosbagDetails = document.getElementById("rosbag-details");
+const recordingList = document.getElementById("recording-list");
 const sensorList = document.getElementById("sensor-list");
 const configEditor = document.getElementById("config-editor");
 const saveConfigButton = document.getElementById("save-config-button");
@@ -90,17 +99,115 @@ function formatRunnerTarget() {
   return `ssh ${destination}:${ssh.port || 22}`;
 }
 
+function requiresConnectionCheck() {
+  return state.config?.commandRunner?.mode === "ssh";
+}
+
+function isConnectionReady() {
+  return !requiresConnectionCheck() || state.connection?.status === "online";
+}
+
+function renderConnection() {
+  const connection = state.connection || {
+    status: "unknown",
+    message: "Connection has not been checked yet.",
+    target: formatRunnerTarget()
+  };
+  const status = connection.status || "unknown";
+
+  connectionTarget.textContent = connection.target || formatRunnerTarget();
+  connectionStatus.textContent = status === "online"
+    ? "Online"
+    : status === "checking"
+      ? "Checking"
+      : status === "offline"
+        ? "Offline"
+        : "Unknown";
+  connectionStatus.className = `status-pill status-${status}`;
+  connectionStatus.title = connection.message || "";
+  checkConnectionButton.disabled = status === "checking";
+  checkConnectionButton.textContent = status === "checking" ? "Checking..." : "Check Connection";
+}
+
 function renderRuntime() {
   const runtime = state.runtime || { isRunning: false };
   runtimePill.textContent = runtime.isRunning ? `Running: ${runtime.activeProfile}` : "Idle";
   runtimePill.style.background = runtime.isRunning ? "#d8f3e7" : "#fffaf1";
-  startButton.disabled = runtime.isRunning;
+  startButton.disabled = runtime.isRunning || !isConnectionReady();
   stopButton.disabled = !runtime.isRunning;
 
   const rosbag = state.rosbag || { isRecording: false };
-  startBagButton.disabled = rosbag.isRecording;
+  startBagButton.disabled = rosbag.isRecording || !isConnectionReady();
   stopBagButton.disabled = !rosbag.isRecording;
   renderRosbagDetails();
+  renderRecordings();
+}
+
+function renderProcesses() {
+  const processes = state.processes || [];
+  const checks = state.health?.checks || {};
+  checkTopicsButton.disabled = !isConnectionReady();
+
+  if (processes.length === 0) {
+    processList.innerHTML = "<div class=\"empty-state\">No drivers or SLAM process configured.</div>";
+    return;
+  }
+
+  processList.innerHTML = processes.map((processInfo) => {
+    const status = processInfo.status || "stopped";
+    const health = checks[processInfo.id];
+    const topics = health?.topics || processInfo.requiredTopics.map((topic) => ({
+      topic,
+      status: "unknown",
+      detail: "not_checked"
+    }));
+    const selectedDriver = processInfo.selectedDriver
+      ? `<span>Selected: ${escapeHtml(processInfo.selectedDriver)}</span>`
+      : "";
+    const topicItems = topics.map((topic) => `
+      <li class="topic-${escapeHtml(topic.status)}">
+        <span>${escapeHtml(topic.topic)}</span>
+        <strong>${escapeHtml(formatTopicStatus(topic.status))}</strong>
+      </li>
+    `).join("");
+
+    return `
+      <article class="process-card">
+        <div class="process-main">
+          <div class="process-title">
+            <strong>${escapeHtml(processInfo.label)}</strong>
+            <span class="sensor-status status-${escapeHtml(status)}">${escapeHtml(formatProcessStatus(status))}</span>
+          </div>
+          ${selectedDriver}
+          <code>${escapeHtml(processInfo.command || "No command configured")}</code>
+          <ul class="topic-list">${topicItems || "<li>No required topics configured.</li>"}</ul>
+        </div>
+        <div class="process-actions">
+          <button class="button button-primary" data-process-action="start" data-process-id="${escapeHtml(processInfo.id)}" ${status !== "stopped" || !isConnectionReady() ? "disabled" : ""}>Start</button>
+          <button class="button button-secondary" data-process-action="pause" data-process-id="${escapeHtml(processInfo.id)}" ${status !== "running" ? "disabled" : ""}>Pause</button>
+          <button class="button button-secondary" data-process-action="resume" data-process-id="${escapeHtml(processInfo.id)}" ${status !== "paused" ? "disabled" : ""}>Resume</button>
+          <button class="button button-secondary" data-process-action="stop" data-process-id="${escapeHtml(processInfo.id)}" ${status === "stopped" ? "disabled" : ""}>Stop</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function formatProcessStatus(status) {
+  return {
+    running: "Running",
+    paused: "Paused",
+    stopped: "Stopped"
+  }[status] || status;
+}
+
+function formatTopicStatus(status) {
+  return {
+    online: "Data",
+    waiting: "Listed",
+    offline: "Missing",
+    unknown: "Unchecked"
+  }[status] || status;
 }
 
 function renderSensors() {
@@ -145,6 +252,7 @@ function renderLogs() {
 function renderRosbagDetails() {
   const rosbagConfig = state.config?.rosbag || {};
   const rosbagRuntime = state.rosbag || { isRecording: false };
+  const activeRecording = rosbagRuntime.activeRecording;
   const topics = Array.isArray(rosbagConfig.topics) ? rosbagConfig.topics : [];
 
   rosbagDetails.innerHTML = `
@@ -161,6 +269,10 @@ function renderRosbagDetails() {
       <code>${escapeHtml(rosbagConfig.outputDirectory || "~/rosbags")}</code>
     </div>
     <div class="detail-item">
+      <strong>Active Output</strong>
+      <code>${escapeHtml(activeRecording?.remotePath || "No active recording")}</code>
+    </div>
+    <div class="detail-item">
       <strong>Setup Command</strong>
       <code>${escapeHtml(rosbagConfig.setupCommand || "Uses current shell environment")}</code>
     </div>
@@ -171,6 +283,44 @@ function renderRosbagDetails() {
   `;
 }
 
+function renderRecordings() {
+  const recordings = [...(state.rosbag?.recordings || [])].reverse();
+  if (recordings.length === 0) {
+    recordingList.innerHTML = "<div class=\"empty-state\">No completed recordings yet.</div>";
+    return;
+  }
+
+  recordingList.innerHTML = recordings.map((recording) => {
+    const isBusy = recording.status === "recording" || recording.status === "copying_to_device";
+    const canDownload = recording.status !== "recording" && recording.status !== "copying_to_device";
+    const statusLabel = {
+      recording: "Recording",
+      saved_on_jetson: "Saved on Orin",
+      copying_to_device: "Copying",
+      downloaded: "Saved locally",
+      failed: "Failed",
+      stopped: "Stopped"
+    }[recording.status] || recording.status;
+
+    return `
+      <article class="recording-card">
+        <div>
+          <strong>${escapeHtml(recording.name)}</strong>
+          <code>${escapeHtml(recording.remotePath)}</code>
+          <span>${escapeHtml(statusLabel)}</span>
+        </div>
+        <button
+          class="button button-secondary"
+          data-recording-download="${escapeHtml(recording.id)}"
+          ${canDownload ? "" : "disabled"}
+        >
+          ${isBusy ? "Working..." : "Save to This Device"}
+        </button>
+      </article>
+    `;
+  }).join("");
+}
+
 function renderConfigEditor() {
   if (state.config) {
     configEditor.value = JSON.stringify(state.config, null, 2);
@@ -178,7 +328,9 @@ function renderConfigEditor() {
 }
 
 function renderAll() {
+  renderConnection();
   renderProfiles();
+  renderProcesses();
   renderRuntime();
   renderSensors();
   renderLogs();
@@ -197,11 +349,55 @@ function escapeHtml(value) {
 async function loadState() {
   const data = await request("/api/state");
   state.config = data.config;
+  state.connection = data.connection;
+  state.processes = data.processes;
+  state.health = data.health;
   state.runtime = data.runtime;
   state.rosbag = data.rosbag;
   state.sensors = data.sensors;
   state.logs = data.logs;
   renderAll();
+}
+
+async function checkConnection() {
+  try {
+    const data = await request("/api/connection/check", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    state.connection = data.connection;
+    renderConnection();
+    renderRuntime();
+    renderProcesses();
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+async function checkTopics() {
+  try {
+    const data = await request("/api/health/check", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    state.health = data.health;
+    renderProcesses();
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+async function runProcessAction(processId, action) {
+  try {
+    const data = await request(`/api/processes/${encodeURIComponent(processId)}/${action}`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    state.processes = data.processes;
+    renderProcesses();
+  } catch (error) {
+    window.alert(error.message);
+  }
 }
 
 async function startLaunch() {
@@ -248,6 +444,20 @@ async function stopRosbag() {
   }
 }
 
+async function downloadRecording(recordingId) {
+  try {
+    const data = await request(`/api/recordings/${encodeURIComponent(recordingId)}/download`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    state.rosbag = data.rosbag;
+    renderRuntime();
+    window.location.href = data.downloadUrl;
+  } catch (error) {
+    window.alert(`Could not save recording: ${error.message}`);
+  }
+}
+
 async function saveConfig() {
   try {
     const nextConfig = JSON.parse(configEditor.value);
@@ -256,6 +466,8 @@ async function saveConfig() {
       body: JSON.stringify(nextConfig)
     });
     state.config = data.config;
+    state.processes = data.processes || state.processes;
+    state.health = data.health || state.health;
     renderAll();
     window.alert("Config saved.");
   } catch (error) {
@@ -265,12 +477,28 @@ async function saveConfig() {
 
 function attachEvents() {
   profileSelect.addEventListener("change", renderProfileDetails);
+  checkConnectionButton.addEventListener("click", checkConnection);
+  checkTopicsButton.addEventListener("click", checkTopics);
   startButton.addEventListener("click", startLaunch);
   stopButton.addEventListener("click", stopLaunch);
   startBagButton.addEventListener("click", startRosbag);
   stopBagButton.addEventListener("click", stopRosbag);
   saveConfigButton.addEventListener("click", saveConfig);
   reloadConfigButton.addEventListener("click", loadState);
+  recordingList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-recording-download]");
+    if (!button) {
+      return;
+    }
+    downloadRecording(button.dataset.recordingDownload);
+  });
+  processList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-process-action]");
+    if (!button) {
+      return;
+    }
+    runProcessAction(button.dataset.processId, button.dataset.processAction);
+  });
 }
 
 function connectEvents() {
@@ -279,6 +507,9 @@ function connectEvents() {
   events.addEventListener("bootstrap", (event) => {
     const data = JSON.parse(event.data);
     state.config = data.config;
+    state.connection = data.connection;
+    state.processes = data.processes;
+    state.health = data.health;
     state.runtime = data.runtime;
     state.rosbag = data.rosbag;
     state.sensors = data.sensors;
@@ -296,6 +527,23 @@ function connectEvents() {
     renderRuntime();
   });
 
+  events.addEventListener("connection", (event) => {
+    state.connection = JSON.parse(event.data);
+    renderConnection();
+    renderRuntime();
+    renderProcesses();
+  });
+
+  events.addEventListener("processes", (event) => {
+    state.processes = JSON.parse(event.data);
+    renderProcesses();
+  });
+
+  events.addEventListener("health", (event) => {
+    state.health = JSON.parse(event.data);
+    renderProcesses();
+  });
+
   events.addEventListener("log", (event) => {
     state.logs.push(JSON.parse(event.data));
     state.logs = state.logs.slice(-500);
@@ -309,7 +557,9 @@ function connectEvents() {
 
   events.addEventListener("config", (event) => {
     state.config = JSON.parse(event.data);
+    renderConnection();
     renderProfiles();
+    renderProcesses();
     renderRosbagDetails();
     renderSensors();
     renderConfigEditor();
